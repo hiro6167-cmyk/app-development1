@@ -1,0 +1,293 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: PositiveVoice Backend Infrastructure
+
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: python3.11
+    MemorySize: 256
+    Environment:
+      Variables:
+        POSTS_TABLE: !Ref PostsTable
+        USERS_TABLE: !Ref UsersTable
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+
+Resources:
+  # ==================== Cognito ====================
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub PositiveVoice-UserPool-${Environment}
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+          RequireUppercase: false
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Required: true
+          Mutable: true
+        - Name: nickname
+          AttributeDataType: String
+          Required: false
+          Mutable: true
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub PositiveVoice-Client-${Environment}
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      SupportedIdentityProviders:
+        - COGNITO
+        - SignInWithApple
+        - Google
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthScopes:
+        - email
+        - openid
+        - profile
+      CallbackURLs:
+        - positivevoice://callback
+      LogoutURLs:
+        - positivevoice://signout
+
+  IdentityPool:
+    Type: AWS::Cognito::IdentityPool
+    Properties:
+      IdentityPoolName: !Sub PositiveVoice_IdentityPool_${Environment}
+      AllowUnauthenticatedIdentities: false
+      CognitoIdentityProviders:
+        - ClientId: !Ref UserPoolClient
+          ProviderName: !GetAtt UserPool.ProviderName
+
+  # ==================== DynamoDB ====================
+  PostsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub PositiveVoice-Posts-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: postId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: type
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: postId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: type-createdAt-index
+          KeySchema:
+            - AttributeName: type
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: userId-createdAt-index
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub PositiveVoice-Users-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+
+  # ==================== S3 ====================
+  MediaBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub positivevoice-media-${Environment}-${AWS::AccountId}
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - '*'
+            AllowedMethods:
+              - GET
+              - PUT
+              - POST
+              - DELETE
+            AllowedOrigins:
+              - '*'
+            MaxAge: 3000
+
+  # ==================== API Gateway ====================
+  Api:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub PositiveVoice-API-${Environment}
+      StageName: !Ref Environment
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: "'*'"
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !GetAtt UserPool.Arn
+
+  # ==================== Lambda Functions ====================
+  PostsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub PositiveVoice-Posts-${Environment}
+      CodeUri: lambda/posts/
+      Handler: index.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PostsTable
+        - ComprehendBasicAccessPolicy: {}
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: '*'
+      Events:
+        GetPosts:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /posts
+            Method: get
+        CreatePost:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /posts
+            Method: post
+        GetPost:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /posts/{id}
+            Method: get
+        DeletePost:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /posts/{id}
+            Method: delete
+        GetSimilarPosts:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /posts/{id}/similar
+            Method: get
+        SearchPosts:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /posts/search
+            Method: get
+        GetMyPosts:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /posts/me
+            Method: get
+
+  AIFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub PositiveVoice-AI-${Environment}
+      CodeUri: lambda/ai/
+      Handler: index.lambda_handler
+      Timeout: 60
+      MemorySize: 512
+      Policies:
+        - ComprehendBasicAccessPolicy: {}
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: '*'
+      Events:
+        Classify:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /ai/classify
+            Method: post
+        Moderate:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /ai/moderate
+            Method: post
+        Embedding:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /ai/embedding
+            Method: post
+        Sentiment:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /ai/sentiment
+            Method: post
+
+Outputs:
+  UserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref UserPool
+    Export:
+      Name: !Sub ${AWS::StackName}-UserPoolId
+
+  UserPoolClientId:
+    Description: Cognito User Pool Client ID
+    Value: !Ref UserPoolClient
+    Export:
+      Name: !Sub ${AWS::StackName}-UserPoolClientId
+
+  IdentityPoolId:
+    Description: Cognito Identity Pool ID
+    Value: !Ref IdentityPool
+    Export:
+      Name: !Sub ${AWS::StackName}-IdentityPoolId
+
+  ApiEndpoint:
+    Description: API Gateway Endpoint
+    Value: !Sub https://${Api}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
+    Export:
+      Name: !Sub ${AWS::StackName}-ApiEndpoint
+
+  MediaBucketName:
+    Description: S3 Media Bucket Name
+    Value: !Ref MediaBucket
+    Export:
+      Name: !Sub ${AWS::StackName}-MediaBucketName
