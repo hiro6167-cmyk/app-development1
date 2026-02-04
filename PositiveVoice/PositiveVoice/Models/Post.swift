@@ -1,0 +1,101 @@
+import Foundation
+
+struct Post: Identifiable, Codable {
+    let id: String
+    let userId: String
+    let type: PostType
+    var content: String
+    var category: PostCategory
+    var isVisible: Bool
+    let createdAt: Date
+
+    var user: User?
+
+    enum PostType: String, Codable, CaseIterable {
+        case goodThing = "good_thing"
+        case idealWorld = "ideal_world"
+
+        var displayName: String {
+            switch self {
+            case .goodThing:
+                return "今日のいいこと"
+            case .idealWorld:
+                return "こうなって欲しい世の中"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .goodThing:
+                return "sun.max.fill"
+            case .idealWorld:
+                return "globe.asia.australia.fill"
+            }
+        }
+    }
+}
+
+extension Post {
+    var timeAgo: String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: createdAt, relativeTo: Date())
+    }
+
+    static let mockGoodThings: [Post] = [
+        Post(
+            id: UUID().uuidString,
+            userId: "user1",
+            type: .goodThing,
+            content: "今日友達とカフェに行って楽しかった！久しぶりに会えて嬉しかったな",
+            category: .friends,
+            isVisible: true,
+            createdAt: Date().addingTimeInterval(-120),
+            user: .mock
+        ),
+        Post(
+            id: UUID().uuidString,
+            userId: "user2",
+            type: .goodThing,
+            content: "テストで目標点取れた！頑張った甲斐があった",
+            category: .achievement,
+            isVisible: true,
+            createdAt: Date().addingTimeInterval(-900),
+            user: User(id: "user2", nickname: "ユーザーB", email: "b@example.com", authProvider: .apple, bio: nil, avatarURL: nil, createdAt: Date(), updatedAt: Date())
+        ),
+        Post(
+            id: UUID().uuidString,
+            userId: "user3",
+            type: .goodThing,
+            content: "お母さんが作ってくれたご飯が美味しかった",
+            category: .family,
+            isVisible: true,
+            createdAt: Date().addingTimeInterval(-3600),
+            user: User(id: "user3", nickname: "ユーザーC", email: "c@example.com", authProvider: .google, bio: nil, avatarURL: nil, createdAt: Date(), updatedAt: Date())
+        )
+    ]
+
+    static let mockIdealWorld: [Post] = [
+        Post(
+            id: UUID().uuidString,
+            userId: "user1",
+            type: .idealWorld,
+            content: "みんなが優しくできる世界になって欲しい",
+            category: .community,
+            isVisible: true,
+            createdAt: Date().addingTimeInterval(-300),
+            user: .mock
+        ),
+        Post(
+            id: UUID().uuidString,
+            userId: "user4",
+            type: .idealWorld,
+            content: "環境問題がなくなる未来が来て欲しい",
+            category: .environment,
+            isVisible: true,
+            createdAt: Date().addingTimeInterval(-1800),
+            user: User(id: "user4", nickname: "ユーザーD", email: "d@example.com", authProvider: .email, bio: nil, avatarURL: nil, createdAt: Date(), updatedAt: Date())
+        )
+    ]
+}
