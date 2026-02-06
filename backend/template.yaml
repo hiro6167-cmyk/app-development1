@@ -54,20 +54,10 @@ Resources:
       ClientName: !Sub PositiveVoice-Client-${Environment}
       UserPoolId: !Ref UserPool
       GenerateSecret: false
-      SupportedIdentityProviders:
-        - COGNITO
-        - SignInWithApple
-        - Google
-      AllowedOAuthFlows:
-        - code
-      AllowedOAuthScopes:
-        - email
-        - openid
-        - profile
-      CallbackURLs:
-        - positivevoice://callback
-      LogoutURLs:
-        - positivevoice://signout
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_SRP_AUTH
 
   IdentityPool:
     Type: AWS::Cognito::IdentityPool
