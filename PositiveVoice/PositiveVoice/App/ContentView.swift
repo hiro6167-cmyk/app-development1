@@ -18,6 +18,7 @@ struct ContentView: View {
         }
         .animation(.easeInOut, value: appState.isLoading)
         .animation(.easeInOut, value: authViewModel.isAuthenticated)
+        .preferredColorScheme(appState.preferredColorScheme) // v2: Apply theme setting
     }
 }
 

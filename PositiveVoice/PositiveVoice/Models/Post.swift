@@ -9,7 +9,39 @@ struct Post: Identifiable, Codable {
     var isVisible: Bool
     let createdAt: Date
 
+    // v2: 画像・コメント・ブックマーク対応
+    var imageUrls: [String]
+    var commentCount: Int
+    var isBookmarked: Bool
+
     var user: User?
+
+    // デフォルト値付きイニシャライザ（既存コードとの互換性維持）
+    init(
+        id: String,
+        userId: String,
+        type: PostType,
+        content: String,
+        category: PostCategory,
+        isVisible: Bool,
+        createdAt: Date,
+        imageUrls: [String] = [],
+        commentCount: Int = 0,
+        isBookmarked: Bool = false,
+        user: User? = nil
+    ) {
+        self.id = id
+        self.userId = userId
+        self.type = type
+        self.content = content
+        self.category = category
+        self.isVisible = isVisible
+        self.createdAt = createdAt
+        self.imageUrls = imageUrls
+        self.commentCount = commentCount
+        self.isBookmarked = isBookmarked
+        self.user = user
+    }
 
     enum PostType: String, Codable, CaseIterable {
         case goodThing = "good_thing"
@@ -52,6 +84,9 @@ extension Post {
             category: .friends,
             isVisible: true,
             createdAt: Date().addingTimeInterval(-120),
+            imageUrls: [],
+            commentCount: 3,
+            isBookmarked: true,
             user: .mock
         ),
         Post(
@@ -62,6 +97,9 @@ extension Post {
             category: .achievement,
             isVisible: true,
             createdAt: Date().addingTimeInterval(-900),
+            imageUrls: [],
+            commentCount: 1,
+            isBookmarked: false,
             user: User(id: "user2", nickname: "ユーザーB", email: "b@example.com", authProvider: .apple, bio: nil, avatarURL: nil, createdAt: Date(), updatedAt: Date())
         ),
         Post(
@@ -72,6 +110,9 @@ extension Post {
             category: .family,
             isVisible: true,
             createdAt: Date().addingTimeInterval(-3600),
+            imageUrls: [],
+            commentCount: 5,
+            isBookmarked: false,
             user: User(id: "user3", nickname: "ユーザーC", email: "c@example.com", authProvider: .google, bio: nil, avatarURL: nil, createdAt: Date(), updatedAt: Date())
         )
     ]
@@ -85,6 +126,9 @@ extension Post {
             category: .community,
             isVisible: true,
             createdAt: Date().addingTimeInterval(-300),
+            imageUrls: [],
+            commentCount: 8,
+            isBookmarked: true,
             user: .mock
         ),
         Post(
@@ -95,6 +139,9 @@ extension Post {
             category: .environment,
             isVisible: true,
             createdAt: Date().addingTimeInterval(-1800),
+            imageUrls: [],
+            commentCount: 2,
+            isBookmarked: false,
             user: User(id: "user4", nickname: "ユーザーD", email: "d@example.com", authProvider: .email, bio: nil, avatarURL: nil, createdAt: Date(), updatedAt: Date())
         )
     ]

@@ -2,7 +2,8 @@ import SwiftUI
 
 struct ProfileView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
-    @State private var myPosts: [Post] = []
+    @StateObject private var viewModel = ProfileViewModel()
+    @State private var selectedTab: ProfileViewModel.ProfileTab = .posts
 
     var body: some View {
         NavigationStack {
@@ -34,6 +35,31 @@ struct ProfileView: View {
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal)
                         }
+
+                        // v2: Follow stats
+                        HStack(spacing: 32) {
+                            NavigationLink(destination: FollowListView(userId: "current_user", listType: .followers)) {
+                                VStack(spacing: 4) {
+                                    Text("\(viewModel.userProfile?.followerCount ?? 0)")
+                                        .font(AppFonts.headline())
+                                        .foregroundColor(AppColors.textPrimary)
+                                    Text("フォロワー")
+                                        .font(AppFonts.caption())
+                                        .foregroundColor(AppColors.textSecondary)
+                                }
+                            }
+
+                            NavigationLink(destination: FollowListView(userId: "current_user", listType: .following)) {
+                                VStack(spacing: 4) {
+                                    Text("\(viewModel.userProfile?.followingCount ?? 0)")
+                                        .font(AppFonts.headline())
+                                        .foregroundColor(AppColors.textPrimary)
+                                    Text("フォロー中")
+                                        .font(AppFonts.caption())
+                                        .foregroundColor(AppColors.textSecondary)
+                                }
+                            }
+                        }
                     }
                     .padding(.top, 20)
 
@@ -48,12 +74,12 @@ struct ProfileView: View {
 
                         HStack(spacing: 20) {
                             StatBox(
-                                title: "今日のいいこと",
+                                title: AppStrings.goodThing,
                                 count: 15,
-                                color: .yellow
+                                color: AppColors.secondary
                             )
                             StatBox(
-                                title: "こうなって欲しい世の中",
+                                title: AppStrings.idealWorld,
                                 count: 8,
                                 color: AppColors.primary
                             )
@@ -65,38 +91,99 @@ struct ProfileView: View {
                     .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 2)
                     .padding(.horizontal)
 
-                    // My posts
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("自分の投稿")
-                            .font(AppFonts.headline())
-                            .foregroundColor(AppColors.textPrimary)
-                            .padding(.horizontal)
-
-                        if myPosts.isEmpty {
-                            // Mock posts for preview
-                            ForEach(Post.mockGoodThings.prefix(2)) { post in
-                                NavigationLink(destination: PostDetailView(post: post)) {
-                                    MyPostCard(post: post)
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                            }
-                        } else {
-                            ForEach(myPosts) { post in
-                                NavigationLink(destination: PostDetailView(post: post)) {
-                                    MyPostCard(post: post)
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                            }
+                    // v2: Tab selector
+                    Picker("", selection: $selectedTab) {
+                        ForEach(ProfileViewModel.ProfileTab.allCases, id: \.self) { tab in
+                            Text(tab.rawValue).tag(tab)
                         }
                     }
+                    .pickerStyle(.segmented)
                     .padding(.horizontal)
+
+                    // Tab content
+                    switch selectedTab {
+                    case .posts:
+                        PostsTabContent(posts: viewModel.myPosts.isEmpty ? Post.mockGoodThings : viewModel.myPosts)
+                    case .bookmarks:
+                        BookmarksTabContent(posts: viewModel.bookmarkedPosts)
+                    }
                 }
                 .padding(.bottom, 100)
             }
             .background(AppColors.background)
             .navigationTitle("マイページ")
             .navigationBarTitleDisplayMode(.inline)
+            .task {
+                await viewModel.loadMyProfile()
+            }
+            .onChange(of: selectedTab) { _, newTab in
+                if newTab == .bookmarks {
+                    Task {
+                        await viewModel.loadBookmarks()
+                    }
+                }
+            }
         }
+    }
+}
+
+// v2: 投稿タブ
+struct PostsTabContent: View {
+    let posts: [Post]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if posts.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "doc.text")
+                        .font(.system(size: 40))
+                        .foregroundColor(Color.gray.opacity(0.5))
+                    Text("まだ投稿がありません")
+                        .font(AppFonts.body())
+                        .foregroundColor(AppColors.textSecondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
+            } else {
+                ForEach(posts) { post in
+                    NavigationLink(destination: PostDetailView(post: post)) {
+                        MyPostCard(post: post)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+            }
+        }
+        .padding(.horizontal)
+    }
+}
+
+// v2: ブックマークタブ
+struct BookmarksTabContent: View {
+    let posts: [Post]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if posts.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "bookmark")
+                        .font(.system(size: 40))
+                        .foregroundColor(Color.gray.opacity(0.5))
+                    Text("ブックマークした投稿がありません")
+                        .font(AppFonts.body())
+                        .foregroundColor(AppColors.textSecondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
+            } else {
+                ForEach(posts) { post in
+                    NavigationLink(destination: PostDetailView(post: post)) {
+                        MyPostCard(post: post)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+            }
+        }
+        .padding(.horizontal)
     }
 }
 

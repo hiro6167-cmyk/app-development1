@@ -27,19 +27,42 @@ extension Color {
     }
 }
 
-// MARK: - App Colors (v2: Warm Orange Theme)
+// MARK: - Theme Setting (v2)
+enum ThemeSetting: String, CaseIterable {
+    case system = "system"
+    case light = "light"
+    case dark = "dark"
+
+    var displayName: String {
+        switch self {
+        case .system: return "システム設定に従う"
+        case .light: return "ライトモード"
+        case .dark: return "ダークモード"
+        }
+    }
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+}
+
+// MARK: - App Colors (v2: Warm Orange Theme with Dark Mode Support)
 // 重要: 緑系の色は一切使用禁止
 enum AppColors {
-    // メインカラー（温かいオレンジ系）
+    // メインカラー（温かいオレンジ系）- ダークモードでも使用
     static let primary = Color(hex: "FF8C42")      // 温かいオレンジ
     static let secondary = Color(hex: "FFD166")    // 明るいイエロー
     static let accent = Color(hex: "F4845F")       // コーラル
 
-    // 背景
+    // 背景 - ライトモード用固定値（既存互換性維持）
     static let background = Color(hex: "FFF8F0")   // クリーム
     static let surface = Color.white
 
-    // テキスト
+    // テキスト - ライトモード用固定値（既存互換性維持）
     static let textPrimary = Color(hex: "5D4037")  // ブラウン
     static let textSecondary = Color(hex: "8D6E63") // ライトブラウン
 
@@ -55,12 +78,39 @@ enum AppColors {
         endPoint: .bottomTrailing
     )
 
-    // ダークモード用
+    // ダークモード用固定値
     static let darkBackground = Color(hex: "1A1A1A")
     static let darkSurface = Color(hex: "2D2D2D")
     static let darkPrimary = Color(hex: "FFB266")
     static let darkTextPrimary = Color(hex: "F5F5F5")
     static let darkTextSecondary = Color(hex: "BDBDBD")
+
+    // MARK: - Adaptive Colors (v2: Auto-switch based on color scheme)
+
+    /// 適応型背景色
+    static func adaptiveBackground(_ colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark ? darkBackground : background
+    }
+
+    /// 適応型サーフェス色
+    static func adaptiveSurface(_ colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark ? darkSurface : surface
+    }
+
+    /// 適応型テキスト色（プライマリ）
+    static func adaptiveTextPrimary(_ colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark ? darkTextPrimary : textPrimary
+    }
+
+    /// 適応型テキスト色（セカンダリ）
+    static func adaptiveTextSecondary(_ colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark ? darkTextSecondary : textSecondary
+    }
+
+    /// 適応型プライマリ色
+    static func adaptivePrimary(_ colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark ? darkPrimary : primary
+    }
 }
 
 // MARK: - App Fonts
