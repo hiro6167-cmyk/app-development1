@@ -314,6 +314,53 @@ https://2qti95chy9.execute-api.ap-northeast-1.amazonaws.com/dev
 }
 ```
 
+#### カーソル型・エンコード規約
+
+**サーバー側（Lambda）:**
+- DynamoDBの `LastEvaluatedKey` をBase64エンコードして返却
+- 内部構造: `{"id": "xxx", "createdAt": "2025-02-07T10:00:00Z"}` → Base64
+- クライアントは内部構造を解釈しない（透過扱い）
+
+**クライアント側:**
+```swift
+// カーソルは不透明な文字列として扱う（デコード禁止）
+struct PaginatedResponse<T: Decodable>: Decodable {
+    let items: [T]
+    let nextCursor: String?  // サーバーから受け取ったままの文字列
+    let hasMore: Bool
+}
+
+// リクエスト時もそのまま送信
+func fetchPosts(cursor: String? = nil) async throws -> PaginatedResponse<Post> {
+    var params: [String: String] = ["limit": "20"]
+    if let cursor = cursor {
+        params["cursor"] = cursor  // エンコードせずそのまま
+    }
+    return try await apiClient.get("/posts", params: params)
+}
+
+// ViewModel での保持
+@Observable
+class HomeViewModel {
+    private(set) var posts: [Post] = []
+    private var nextCursor: String?  // 型は String?（透過）
+    private(set) var hasMore: Bool = true
+
+    func loadMore() async {
+        guard hasMore, nextCursor != nil else { return }
+        let response = try await postService.fetchPosts(cursor: nextCursor)
+        posts.append(contentsOf: response.items)
+        nextCursor = response.nextCursor
+        hasMore = response.hasMore
+    }
+}
+```
+
+**禁止事項:**
+- クライアントでcursorをBase64デコードしない
+- cursorの内容に依存したロジックを書かない
+- cursorを永続化しない（セッション中のメモリ保持のみ）
+
 ### 4.4 エラーレスポンス標準仕様
 
 **サーバーエラーレスポンス形式:**
@@ -567,6 +614,53 @@ PositiveVoice/
 5. 失敗時: ログイン画面へ遷移
 ```
 
+**単一フライト実装パターン（actor方式）:**
+```swift
+actor TokenRefresher {
+    private var refreshTask: Task<String, Error>?
+
+    func refreshIfNeeded() async throws -> String {
+        // 既に進行中のリフレッシュがあれば、それを待つ
+        if let existingTask = refreshTask {
+            return try await existingTask.value
+        }
+
+        // 新規リフレッシュタスクを作成
+        let task = Task<String, Error> {
+            defer { refreshTask = nil }
+
+            guard let refreshToken = KeychainHelper.get(.refreshToken) else {
+                throw AuthError.noRefreshToken
+            }
+
+            let newTokens = try await CognitoClient.refresh(refreshToken)
+            KeychainHelper.set(.idToken, newTokens.idToken)
+            return newTokens.idToken
+        }
+
+        refreshTask = task
+        return try await task.value
+    }
+}
+
+// 使用例（APIClient内）
+private let tokenRefresher = TokenRefresher()
+
+func request<T>(_ endpoint: Endpoint) async throws -> T {
+    do {
+        return try await performRequest(endpoint)
+    } catch APIError.tokenExpired {
+        let newToken = try await tokenRefresher.refreshIfNeeded()
+        return try await performRequest(endpoint, token: newToken)
+    }
+}
+```
+
+**選定理由:**
+- actor: Swift Concurrency標準、データ競合を言語レベルで防止
+- Task共有: 同時多発リクエストが1つのリフレッシュを共有
+- AsyncLock不採用: 外部ライブラリ依存を避ける
+
 **サインアウト時の処理:**
 - Keychain: ID Token, Refresh Token 削除
 - メモリ: Access Token, ユーザー情報 クリア
@@ -601,9 +695,218 @@ PositiveVoice/
 - 対応形式: JPEG, PNG, HEIC（サーバー保存はJPEG統一）
 - 署名付きURLの有効期限: 15分
 
+#### EXIF除去の実装方針
+
+**方針:** CGImageDestination でメタデータなしのJPEGを新規作成（既存画像のメタデータを「削除」するのではなく、「含めずに新規作成」する）
+
+```swift
+import ImageIO
+import UniformTypeIdentifiers
+
+enum ImageProcessor {
+    /// 画像をEXIFなしJPEGに変換（リサイズ含む）
+    static func processForUpload(_ data: Data, maxSize: CGFloat = 1080) throws -> Data {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+            throw ImageError.invalidData
+        }
+
+        // リサイズ
+        let resizedImage = resize(cgImage, maxSize: maxSize)
+
+        // EXIF除去してJPEGエンコード（メタデータを一切含めない）
+        let mutableData = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            mutableData,
+            UTType.jpeg.identifier as CFString,
+            1,
+            nil
+        ) else {
+            throw ImageError.encodingFailed
+        }
+
+        // kCGImageDestinationLossyCompressionQuality のみ指定
+        // メタデータ系のキーを一切渡さない = EXIFなし
+        let options: [CFString: Any] = [
+            kCGImageDestinationLossyCompressionQuality: 0.8
+        ]
+
+        CGImageDestinationAddImage(destination, resizedImage, options as CFDictionary)
+
+        guard CGImageDestinationFinalize(destination) else {
+            throw ImageError.encodingFailed
+        }
+
+        return mutableData as Data
+    }
+
+    private static func resize(_ image: CGImage, maxSize: CGFloat) -> CGImage {
+        let width = CGFloat(image.width)
+        let height = CGFloat(image.height)
+        let maxDimension = max(width, height)
+
+        guard maxDimension > maxSize else { return image }
+
+        let scale = maxSize / maxDimension
+        let newWidth = Int(width * scale)
+        let newHeight = Int(height * scale)
+
+        let context = CGContext(
+            data: nil,
+            width: newWidth,
+            height: newHeight,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: newWidth, height: newHeight))
+
+        return context.makeImage()!
+    }
+}
+```
+
+**検証方法:**
+```swift
+// 開発時のみ: 出力にEXIFが含まれていないことを確認
+#if DEBUG
+func verifyNoExif(_ data: Data) -> Bool {
+    guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+          let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any] else {
+        return true
+    }
+    // GPS, EXIF, TIFFが含まれていないことを確認
+    let sensitiveKeys = [kCGImagePropertyGPSDictionary, kCGImagePropertyExifDictionary]
+    return sensitiveKeys.allSatisfy { properties[$0 as String] == nil }
+}
+#endif
+```
+
+**禁止事項:**
+- CGImageSourceCopyProperties で取得したメタデータを部分削除する方式（漏れのリスク）
+- UIImageのJPEGRepresentationを直接使う（EXIFが残る可能性）
+
 ---
 
-## 8. アクセシビリティ設計
+## 8. ローカルキャッシュ設計
+
+### 8.1 ブックマークキャッシュ整合方針
+
+**前提:** サーバーが正（Single Source of Truth）
+
+**キャッシュ構造:**
+```swift
+// UserDefaults キー
+enum CacheKeys {
+    static let bookmarkedPostIds = "bookmarked_post_ids"  // Set<String>
+    static let bookmarksSyncedAt = "bookmarks_synced_at"  // Date
+}
+```
+
+**同期フロー:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      アプリ起動時                                 │
+├─────────────────────────────────────────────────────────────────┤
+│ 1. ローカルキャッシュでUI即時表示（UX優先）                        │
+│ 2. バックグラウンドでサーバー同期                                 │
+│ 3. 差分があればローカル更新 → UI反映                              │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                   ブックマーク追加/削除時                          │
+├─────────────────────────────────────────────────────────────────┤
+│ 1. ローカルキャッシュを楽観的更新（即時UI反映）                     │
+│ 2. サーバーAPIを呼び出し                                          │
+│ 3. 成功: 完了                                                    │
+│ 4. 失敗: ローカルをロールバック + エラー表示                       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**実装:**
+```swift
+@Observable
+class BookmarkService {
+    private(set) var bookmarkedPostIds: Set<String> = []
+    private var pendingOperations: [String: BookmarkOperation] = [:]
+
+    enum BookmarkOperation { case add, remove }
+
+    init() {
+        // 起動時: ローカルキャッシュ読み込み
+        loadFromCache()
+    }
+
+    func syncWithServer() async {
+        do {
+            let serverBookmarks = try await apiClient.get("/bookmarks")
+            let serverIds = Set(serverBookmarks.map { $0.postId })
+
+            // サーバーが正
+            bookmarkedPostIds = serverIds
+            saveToCache()
+        } catch {
+            // 同期失敗時はローカルのまま継続（次回起動時に再試行）
+            Logger.warning("Bookmark sync failed: \(error)")
+        }
+    }
+
+    func toggle(_ postId: String) async throws {
+        let isCurrentlyBookmarked = bookmarkedPostIds.contains(postId)
+
+        // 楽観的更新
+        if isCurrentlyBookmarked {
+            bookmarkedPostIds.remove(postId)
+        } else {
+            bookmarkedPostIds.insert(postId)
+        }
+        saveToCache()
+
+        do {
+            if isCurrentlyBookmarked {
+                try await apiClient.delete("/bookmarks/\(postId)")
+            } else {
+                try await apiClient.post("/bookmarks/\(postId)")
+            }
+        } catch {
+            // ロールバック
+            if isCurrentlyBookmarked {
+                bookmarkedPostIds.insert(postId)
+            } else {
+                bookmarkedPostIds.remove(postId)
+            }
+            saveToCache()
+            throw error
+        }
+    }
+
+    private func loadFromCache() {
+        if let ids = UserDefaults.standard.array(forKey: CacheKeys.bookmarkedPostIds) as? [String] {
+            bookmarkedPostIds = Set(ids)
+        }
+    }
+
+    private func saveToCache() {
+        UserDefaults.standard.set(Array(bookmarkedPostIds), forKey: CacheKeys.bookmarkedPostIds)
+    }
+}
+```
+
+**エッジケース対応:**
+| ケース | 対応 |
+|--------|------|
+| オフラインでブックマーク | 楽観的更新のみ、次回オンライン時に同期 |
+| 同期中に操作 | 操作を優先、同期結果はマージ |
+| サーバーで削除済み投稿 | 同期時にローカルから除外 |
+| ログアウト | ローカルキャッシュ全削除 |
+
+---
+
+## 9. アクセシビリティ設計
 
 | 項目 | 対応方針 |
 |------|----------|
@@ -612,3 +915,110 @@ PositiveVoice/
 | ダークモード | 完全対応（v2） |
 | コントラスト | WCAG AA基準（4.5:1以上） |
 | タップターゲット | 最小44pt × 44pt |
+
+---
+
+## 10. Firebase Analytics 設計
+
+### 10.1 プライバシーポリシーとの整合
+
+プライバシーポリシー記載の「利用データ」に対応するイベントを定義。
+**収集するデータは匿名化され、個人を特定する情報は含まない。**
+
+### 10.2 イベント一覧
+
+| イベント名 | 説明 | パラメータ | プライバシーポリシー対応 |
+|-----------|------|-----------|------------------------|
+| **画面表示** |
+| `screen_view` | 画面表示 | `screen_name`, `screen_class` | 閲覧履歴 |
+| **認証** |
+| `sign_up` | 新規登録完了 | `method: "email"` | - |
+| `login` | ログイン成功 | `method: "email"` | - |
+| `logout` | ログアウト | - | - |
+| **投稿** |
+| `post_create` | 投稿作成 | `post_type`, `category`, `has_image` | 利用状況 |
+| `post_view` | 投稿詳細表示 | `post_id`, `post_type` | 閲覧履歴 |
+| `post_delete` | 投稿削除 | `post_id` | - |
+| **エンゲージメント** |
+| `bookmark_add` | ブックマーク追加 | `post_id` | 利用状況 |
+| `bookmark_remove` | ブックマーク削除 | `post_id` | - |
+| `comment_create` | コメント投稿 | `post_id` | 利用状況 |
+| `share` | シェア | `post_id`, `method` | 利用状況 |
+| **ソーシャル** |
+| `follow` | フォロー | `target_user_id` | 利用状況 |
+| `unfollow` | アンフォロー | `target_user_id` | - |
+| **検索** |
+| `search` | 検索実行 | `search_term`, `result_count` | 利用状況 |
+| `category_filter` | カテゴリフィルタ | `category` | 利用状況 |
+| **エラー** |
+| `error` | エラー発生 | `error_code`, `screen_name` | - |
+
+### 10.3 実装ガイドライン
+
+```swift
+import FirebaseAnalytics
+
+enum AnalyticsEvent {
+    case postCreate(type: PostType, category: PostCategory, hasImage: Bool)
+    case postView(postId: String, type: PostType)
+    case bookmarkAdd(postId: String)
+    case search(term: String, resultCount: Int)
+    // ... その他
+
+    var name: String {
+        switch self {
+        case .postCreate: return "post_create"
+        case .postView: return "post_view"
+        case .bookmarkAdd: return "bookmark_add"
+        case .search: return "search"
+        }
+    }
+
+    var parameters: [String: Any] {
+        switch self {
+        case .postCreate(let type, let category, let hasImage):
+            return [
+                "post_type": type.rawValue,
+                "category": category.rawValue,
+                "has_image": hasImage
+            ]
+        case .postView(let postId, let type):
+            return [
+                "post_id": postId,
+                "post_type": type.rawValue
+            ]
+        case .bookmarkAdd(let postId):
+            return ["post_id": postId]
+        case .search(let term, let resultCount):
+            return [
+                "search_term": term,
+                "result_count": resultCount
+            ]
+        }
+    }
+
+    func log() {
+        Analytics.logEvent(name, parameters: parameters)
+    }
+}
+
+// 使用例
+AnalyticsEvent.postCreate(type: .light, category: .daily, hasImage: true).log()
+```
+
+### 10.4 収集しないデータ（明示的除外）
+
+| データ | 理由 |
+|--------|------|
+| 投稿本文 | プライバシー保護 |
+| ユーザー名・メールアドレス | 個人特定情報 |
+| 位置情報 | 未使用機能 |
+| 端末識別子（IDFA） | ATT未対応のため |
+
+### 10.5 App Store プライバシーラベル対応
+
+| データ種類 | 収集する | 用途 | ユーザーにリンク |
+|-----------|---------|------|----------------|
+| 識別子 | No | - | - |
+| 使用状況データ | Yes | アプリ機能・分析 | No（匿名） |
+| 診断 | Yes | クラッシュデータ | No |
