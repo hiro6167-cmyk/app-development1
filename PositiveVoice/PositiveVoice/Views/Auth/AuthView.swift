@@ -14,12 +14,12 @@ struct AuthView: View {
                 VStack(spacing: 16) {
                     ZStack {
                         Circle()
-                            .fill(AppColors.primaryGreen.opacity(0.1))
+                            .fill(AppColors.primary.opacity(0.1))
                             .frame(width: 100, height: 100)
 
                         Image(systemName: "bubble.left.and.bubble.right.fill")
                             .font(.system(size: 40))
-                            .foregroundColor(AppColors.primaryGreen)
+                            .foregroundColor(AppColors.primary)
                     }
 
                     Text(AppStrings.appName)
@@ -88,13 +88,13 @@ struct AuthView: View {
                             Text("メールで登録")
                                 .font(AppFonts.headline())
                         }
-                        .foregroundColor(AppColors.primaryGreen)
+                        .foregroundColor(AppColors.primary)
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
                         .background(Color.clear)
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
-                                .stroke(AppColors.primaryGreen, lineWidth: 2)
+                                .stroke(AppColors.primary, lineWidth: 2)
                         )
                     }
                 }
@@ -107,7 +107,7 @@ struct AuthView: View {
                     Text("すでにアカウントをお持ちの方は")
                         .foregroundColor(AppColors.textSecondary)
                     + Text("ログイン")
-                        .foregroundColor(AppColors.primaryGreen)
+                        .foregroundColor(AppColors.primary)
                 }
                 .font(AppFonts.caption(14))
                 .padding(.bottom, 40)

@@ -13,13 +13,13 @@ struct OnboardingView: View {
         ),
         OnboardingPage(
             icon: "globe.asia.australia.fill",
-            iconColor: AppColors.primaryGreen,
+            iconColor: AppColors.primary,
             title: "「こうなって欲しい世の中」\nを語ろう",
             description: "あなたの理想を\n声にしよう"
         ),
         OnboardingPage(
             icon: "person.3.fill",
-            iconColor: AppColors.secondaryOrange,
+            iconColor: AppColors.secondary,
             title: "同じ想いの人と\nつながる",
             description: "似た考えの投稿が\n自動で見つかる"
         )
@@ -52,7 +52,7 @@ struct OnboardingView: View {
             HStack(spacing: 8) {
                 ForEach(0..<pages.count, id: \.self) { index in
                     Circle()
-                        .fill(currentPage == index ? AppColors.primaryGreen : Color.gray.opacity(0.3))
+                        .fill(currentPage == index ? AppColors.primary : Color.gray.opacity(0.3))
                         .frame(width: 10, height: 10)
                 }
             }
@@ -73,7 +73,7 @@ struct OnboardingView: View {
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(AppColors.primaryGreen)
+                    .background(AppColors.primary)
                     .cornerRadius(12)
             }
             .padding(.horizontal, 40)

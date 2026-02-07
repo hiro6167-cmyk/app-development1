@@ -16,7 +16,7 @@ struct SettingsView: View {
                     }
 
                     NavigationLink(destination: Text("メールアドレス変更")) {
-                        SettingsRow(icon: "envelope.fill", title: "メールアドレス変更", color: .green)
+                        SettingsRow(icon: "envelope.fill", title: "メールアドレス変更", color: AppColors.primary)
                     }
 
                     NavigationLink(destination: Text("パスワード変更")) {
@@ -163,7 +163,7 @@ struct ProfileEditView: View {
                     dismiss()
                 }
                 .frame(maxWidth: .infinity)
-                .foregroundColor(AppColors.primaryGreen)
+                .foregroundColor(AppColors.primary)
             }
         }
         .navigationTitle("プロフィール編集")

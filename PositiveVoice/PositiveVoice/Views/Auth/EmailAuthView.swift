@@ -92,7 +92,7 @@ struct EmailAuthView: View {
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
-                        .background(isFormValid ? AppColors.primaryGreen : Color.gray)
+                        .background(isFormValid ? AppColors.primary : Color.gray)
                         .cornerRadius(12)
                 }
                 .disabled(!isFormValid)
