@@ -18,9 +18,9 @@ struct Post: Identifiable, Codable {
         var displayName: String {
             switch self {
             case .goodThing:
-                return "今日のいいこと"
+                return AppStrings.goodThing  // 今日あったいいこと
             case .idealWorld:
-                return "こうなって欲しい世の中"
+                return AppStrings.idealWorld  // 世界にこうなってほしい
             }
         }
 
@@ -29,7 +29,7 @@ struct Post: Identifiable, Codable {
             case .goodThing:
                 return "sun.max.fill"
             case .idealWorld:
-                return "globe.asia.australia.fill"
+                return "sparkles"  // v2: leaf.fillは緑を想起させるため禁止
             }
         }
     }

@@ -70,7 +70,7 @@ struct PostDetailView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack(spacing: 8) {
                         Image(systemName: "bubble.left.and.bubble.right")
-                            .foregroundColor(AppColors.primaryGreen)
+                            .foregroundColor(AppColors.primary)
                         Text("似ている投稿")
                             .font(AppFonts.headline())
                             .foregroundColor(AppColors.textPrimary)

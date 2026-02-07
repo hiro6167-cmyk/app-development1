@@ -51,7 +51,7 @@ enum PostCategory: String, Codable, CaseIterable, Identifiable {
         case .family: return "house.fill"
         case .hobby: return "gamecontroller.fill"
         case .achievement: return "star.fill"
-        case .nature: return "leaf.fill"
+        case .nature: return "cloud.sun.fill"  // leaf.fillは緑を想起させるため禁止
         case .food: return "fork.knife"
         case .environment: return "globe.americas.fill"
         case .peace: return "hand.raised.fill"
@@ -64,23 +64,24 @@ enum PostCategory: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    // カラー: 緑系は使用禁止、オレンジ/暖色系で統一
     var color: Color {
         switch self {
-        case .school: return .blue
-        case .friends: return .orange
+        case .school: return AppColors.accent          // コーラル
+        case .friends: return AppColors.primary        // オレンジ
         case .family: return .pink
         case .hobby: return .purple
-        case .achievement: return .yellow
-        case .nature: return .green
-        case .food: return .red
-        case .environment: return .teal
+        case .achievement: return AppColors.secondary  // イエロー
+        case .nature: return AppColors.success         // オレンジ系（緑禁止）
+        case .food: return AppColors.error             // ソフトレッド
+        case .environment: return AppColors.accent     // コーラル
         case .peace: return .indigo
-        case .education: return .cyan
-        case .humanRights: return .mint
+        case .education: return AppColors.secondary    // イエロー
+        case .humanRights: return AppColors.primary    // オレンジ
         case .technology: return .gray
-        case .health: return .red
-        case .community: return .orange
-        case .other: return .secondary
+        case .health: return AppColors.error           // ソフトレッド
+        case .community: return AppColors.primary      // オレンジ
+        case .other: return AppColors.textSecondary
         }
     }
 

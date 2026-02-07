@@ -97,10 +97,10 @@ struct PostTypeTabView: View {
                     VStack(spacing: 8) {
                         Text(type.displayName)
                             .font(AppFonts.body(14))
-                            .foregroundColor(selectedType == type ? AppColors.primaryGreen : AppColors.textSecondary)
+                            .foregroundColor(selectedType == type ? AppColors.primary : AppColors.textSecondary)
 
                         Rectangle()
-                            .fill(selectedType == type ? AppColors.primaryGreen : Color.clear)
+                            .fill(selectedType == type ? AppColors.primary : Color.clear)
                             .frame(height: 2)
                     }
                 }

@@ -55,7 +55,7 @@ struct ProfileView: View {
                             StatBox(
                                 title: "こうなって欲しい世の中",
                                 count: 8,
-                                color: AppColors.primaryGreen
+                                color: AppColors.primary
                             )
                         }
                     }

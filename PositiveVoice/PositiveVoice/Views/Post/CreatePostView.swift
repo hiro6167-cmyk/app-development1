@@ -68,7 +68,7 @@ struct CreatePostView: View {
                 // AI category info
                 HStack(spacing: 8) {
                     Image(systemName: "cpu")
-                        .foregroundColor(AppColors.primaryGreen)
+                        .foregroundColor(AppColors.primary)
                     Text("カテゴリは自動で分類されます")
                         .font(AppFonts.caption())
                         .foregroundColor(AppColors.textSecondary)
@@ -96,7 +96,7 @@ struct CreatePostView: View {
                         viewModel.submitPost()
                     }
                     .font(AppFonts.headline())
-                    .foregroundColor(viewModel.isValid ? AppColors.primaryGreen : Color.gray)
+                    .foregroundColor(viewModel.isValid ? AppColors.primary : Color.gray)
                     .disabled(!viewModel.isValid || viewModel.isSubmitting)
                 }
             }
@@ -134,14 +134,14 @@ struct PostTypeButton: View {
                         .font(.system(size: 16))
                 }
             }
-            .foregroundColor(isSelected ? AppColors.primaryGreen : AppColors.textSecondary)
+            .foregroundColor(isSelected ? AppColors.primary : AppColors.textSecondary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
-            .background(isSelected ? AppColors.primaryGreen.opacity(0.1) : Color.white)
+            .background(isSelected ? AppColors.primary.opacity(0.1) : Color.white)
             .cornerRadius(12)
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? AppColors.primaryGreen : Color.gray.opacity(0.2), lineWidth: isSelected ? 2 : 1)
+                    .stroke(isSelected ? AppColors.primary : Color.gray.opacity(0.2), lineWidth: isSelected ? 2 : 1)
             )
         }
     }
