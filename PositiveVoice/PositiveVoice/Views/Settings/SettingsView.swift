@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
-    @State private var isDarkMode = false
+    @EnvironmentObject var appState: AppState
     @State private var showLogoutAlert = false
     @State private var showDeleteAlert = false
 
@@ -12,7 +12,7 @@ struct SettingsView: View {
                 // Account section
                 Section("アカウント") {
                     NavigationLink(destination: ProfileEditView()) {
-                        SettingsRow(icon: "person.fill", title: "プロフィール編集", color: .blue)
+                        SettingsRow(icon: "person.fill", title: "プロフィール編集", color: AppColors.accent)
                     }
 
                     NavigationLink(destination: Text("メールアドレス変更")) {
@@ -20,21 +20,25 @@ struct SettingsView: View {
                     }
 
                     NavigationLink(destination: Text("パスワード変更")) {
-                        SettingsRow(icon: "lock.fill", title: "パスワード変更", color: .orange)
+                        SettingsRow(icon: "lock.fill", title: "パスワード変更", color: AppColors.secondary)
                     }
                 }
 
                 // App settings section
                 Section("アプリ設定") {
                     NavigationLink(destination: Text("通知設定")) {
-                        SettingsRow(icon: "bell.fill", title: "通知設定", color: .red)
+                        SettingsRow(icon: "bell.fill", title: "通知設定", color: AppColors.error)
                     }
 
-                    HStack {
-                        SettingsRow(icon: "moon.fill", title: "ダークモード", color: .purple)
-                        Spacer()
-                        Toggle("", isOn: $isDarkMode)
-                            .labelsHidden()
+                    // v2: Theme picker
+                    NavigationLink(destination: ThemeSettingView()) {
+                        HStack {
+                            SettingsRow(icon: "moon.fill", title: "テーマ", color: .purple)
+                            Spacer()
+                            Text(appState.themeSetting.displayName)
+                                .font(AppFonts.caption())
+                                .foregroundColor(AppColors.textSecondary)
+                        }
                     }
                 }
 
@@ -175,7 +179,53 @@ struct ProfileEditView: View {
     }
 }
 
+// v2: テーマ設定画面
+struct ThemeSettingView: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        List {
+            ForEach(ThemeSetting.allCases, id: \.self) { setting in
+                Button(action: {
+                    appState.setTheme(setting)
+                }) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(setting.displayName)
+                                .font(AppFonts.body())
+                                .foregroundColor(AppColors.textPrimary)
+
+                            Text(themeDescription(setting))
+                                .font(AppFonts.caption())
+                                .foregroundColor(AppColors.textSecondary)
+                        }
+
+                        Spacer()
+
+                        if appState.themeSetting == setting {
+                            Image(systemName: "checkmark")
+                                .foregroundColor(AppColors.primary)
+                        }
+                    }
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+        .navigationTitle("テーマ設定")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func themeDescription(_ setting: ThemeSetting) -> String {
+        switch setting {
+        case .system: return "端末の設定に合わせて自動で切り替わります"
+        case .light: return "常に明るい背景で表示します"
+        case .dark: return "常に暗い背景で表示します"
+        }
+    }
+}
+
 #Preview {
     SettingsView()
         .environmentObject(AuthViewModel())
+        .environmentObject(AppState())
 }
