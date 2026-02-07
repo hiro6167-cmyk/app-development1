@@ -128,4 +128,5 @@ struct TabBarButton: View {
 #Preview {
     MainTabView()
         .environmentObject(AuthViewModel())
+        .environmentObject(AppState())
 }
