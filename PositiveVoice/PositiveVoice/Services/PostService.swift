@@ -186,11 +186,13 @@ private struct UserResponse: Decodable {
     func toUser() -> User {
         User(
             id: userId,
-            email: email ?? "",
             nickname: nickname ?? "匿名",
-            avatarURL: avatarURL,
+            email: email ?? "",
+            authProvider: .email,
             bio: bio,
-            createdAt: Date()
+            avatarURL: avatarURL,
+            createdAt: Date(),
+            updatedAt: Date()
         )
     }
 }

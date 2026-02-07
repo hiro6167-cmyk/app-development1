@@ -62,11 +62,13 @@ class AuthService: AuthServiceProtocol {
         // Create and cache user
         currentUserCache = User(
             id: cognitoUser.userId,
-            email: cognitoUser.email,
             nickname: cognitoUser.nickname,
-            avatarURL: nil,
+            email: cognitoUser.email,
+            authProvider: .email,
             bio: nil,
-            createdAt: Date()
+            avatarURL: nil,
+            createdAt: Date(),
+            updatedAt: Date()
         )
 
         print("AuthService: Sign in successful for \(email)")
@@ -117,11 +119,13 @@ class AuthService: AuthServiceProtocol {
 
             currentUserCache = User(
                 id: userId,
-                email: email,
                 nickname: nickname,
-                avatarURL: nil,
+                email: email,
+                authProvider: .email,
                 bio: nil,
-                createdAt: Date()
+                avatarURL: nil,
+                createdAt: Date(),
+                updatedAt: Date()
             )
             return currentUserCache
         }
