@@ -1,10 +1,9 @@
 import Foundation
 
-// AWS Amplifyは後から追加します
-// 現在はモックモードで動作します
+// MARK: - Post Service Protocol
 
 protocol PostServiceProtocol {
-    func createPost(content: String, type: Post.PostType) async throws -> Post
+    func createPost(content: String, type: Post.PostType, category: PostCategory?, imageUrls: [String]) async throws -> Post
     func fetchPosts(type: Post.PostType, sortOrder: HomeViewModel.SortOrder, limit: Int) async throws -> [Post]
     func fetchPost(id: String) async throws -> Post?
     func fetchSimilarPosts(postId: String, limit: Int) async throws -> [Post]
@@ -13,96 +12,190 @@ protocol PostServiceProtocol {
     func deletePost(id: String) async throws
 }
 
+// MARK: - Post Service Implementation
+
 class PostService: PostServiceProtocol {
     static let shared = PostService()
 
+    private let apiClient = APIClient.shared
+
     private init() {}
 
-    // MARK: - Create Post (Mock)
+    // MARK: - Create Post
 
-    func createPost(content: String, type: Post.PostType) async throws -> Post {
-        try await Task.sleep(nanoseconds: 500_000_000)
-
-        let post = Post(
-            id: UUID().uuidString,
-            userId: "mock_user",
-            type: type,
+    func createPost(content: String, type: Post.PostType, category: PostCategory? = nil, imageUrls: [String] = []) async throws -> Post {
+        let request = CreatePostRequest(
             content: content,
-            category: type == .goodThing ? .other : .community,
-            isVisible: true,
-            createdAt: Date(),
-            user: User.mock
+            type: type.rawValue,
+            category: category?.rawValue,
+            imageUrls: imageUrls.isEmpty ? nil : imageUrls
         )
 
-        print("PostService: Mock created post")
-        return post
+        let response: CreatePostResponse = try await apiClient.post("/posts", body: request)
+        return response.toPost()
     }
 
-    // MARK: - Fetch Posts (Mock)
+    // MARK: - Fetch Posts
 
     func fetchPosts(type: Post.PostType, sortOrder: HomeViewModel.SortOrder, limit: Int = 20) async throws -> [Post] {
-        try await Task.sleep(nanoseconds: 300_000_000)
-
-        let posts = type == .goodThing ? Post.mockGoodThings : Post.mockIdealWorld
+        var queryItems = [
+            URLQueryItem(name: "type", value: type.rawValue),
+            URLQueryItem(name: "limit", value: String(limit))
+        ]
 
         if sortOrder == .recommended {
-            return posts.shuffled()
+            queryItems.append(URLQueryItem(name: "sort", value: "recommended"))
+        } else {
+            queryItems.append(URLQueryItem(name: "sort", value: "latest"))
         }
-        return posts
+
+        let response: PostsListResponse = try await apiClient.get("/posts", queryItems: queryItems)
+        return response.posts.map { $0.toPost() }
     }
 
-    // MARK: - Fetch Single Post (Mock)
+    // MARK: - Fetch Single Post
 
     func fetchPost(id: String) async throws -> Post? {
-        try await Task.sleep(nanoseconds: 200_000_000)
-        return Post.mockGoodThings.first
+        let response: PostResponse = try await apiClient.get("/posts/\(id)")
+        return response.toPost()
     }
 
-    // MARK: - Fetch Similar Posts (Mock)
+    // MARK: - Fetch Similar Posts
 
     func fetchSimilarPosts(postId: String, limit: Int = 5) async throws -> [Post] {
-        try await Task.sleep(nanoseconds: 300_000_000)
-        return Array(Post.mockGoodThings.prefix(limit))
+        let queryItems = [URLQueryItem(name: "limit", value: String(limit))]
+        let response: PostsListResponse = try await apiClient.get("/posts/\(postId)/similar", queryItems: queryItems)
+        return response.posts.map { $0.toPost() }
     }
 
-    // MARK: - Fetch My Posts (Mock)
+    // MARK: - Fetch My Posts
 
     func fetchMyPosts(userId: String) async throws -> [Post] {
-        try await Task.sleep(nanoseconds: 300_000_000)
-        return Post.mockGoodThings
+        let response: PostsListResponse = try await apiClient.get("/posts/me")
+        return response.posts.map { $0.toPost() }
     }
 
-    // MARK: - Search Posts (Mock)
+    // MARK: - Search Posts
 
     func searchPosts(query: String, type: Post.PostType?, category: PostCategory?) async throws -> [Post] {
-        try await Task.sleep(nanoseconds: 300_000_000)
+        var queryItems = [URLQueryItem]()
 
-        var posts = Post.mockGoodThings + Post.mockIdealWorld
+        if !query.isEmpty {
+            queryItems.append(URLQueryItem(name: "q", value: query))
+        }
 
         if let type = type {
-            posts = posts.filter { $0.type == type }
+            queryItems.append(URLQueryItem(name: "type", value: type.rawValue))
         }
 
         if let category = category {
-            posts = posts.filter { $0.category == category }
+            queryItems.append(URLQueryItem(name: "category", value: category.rawValue))
         }
 
-        if !query.isEmpty {
-            posts = posts.filter { $0.content.localizedCaseInsensitiveContains(query) }
-        }
-
-        return posts
+        let response: PostsListResponse = try await apiClient.get("/posts/search", queryItems: queryItems)
+        return response.posts.map { $0.toPost() }
     }
 
-    // MARK: - Delete Post (Mock)
+    // MARK: - Delete Post
 
     func deletePost(id: String) async throws {
-        try await Task.sleep(nanoseconds: 200_000_000)
-        print("PostService: Mock deleted post \(id)")
+        try await apiClient.delete("/posts/\(id)")
+        print("PostService: Deleted post \(id)")
     }
 }
 
+// MARK: - Request Models
+
+private struct CreatePostRequest: Encodable {
+    let content: String
+    let type: String
+    let category: String?
+    let imageUrls: [String]?
+}
+
 // MARK: - Response Models
+
+private struct PostsListResponse: Decodable {
+    let posts: [PostResponse]
+    let nextToken: String?
+}
+
+private struct CreatePostResponse: Decodable {
+    let postId: String
+    let userId: String
+    let type: String
+    let content: String
+    let category: String?
+    let imageUrls: [String]?
+    let isVisible: Bool
+    let createdAt: String
+    let user: UserResponse?
+
+    func toPost() -> Post {
+        Post(
+            id: postId,
+            userId: userId,
+            type: Post.PostType(rawValue: type) ?? .goodThing,
+            content: content,
+            category: PostCategory(rawValue: category ?? "") ?? .other,
+            imageUrls: imageUrls ?? [],
+            isVisible: isVisible,
+            createdAt: ISO8601DateFormatter().date(from: createdAt) ?? Date(),
+            user: user?.toUser()
+        )
+    }
+}
+
+private struct PostResponse: Decodable {
+    let postId: String
+    let userId: String
+    let type: String
+    let content: String
+    let category: String?
+    let imageUrls: [String]?
+    let isVisible: Bool
+    let createdAt: String
+    let user: UserResponse?
+    let commentCount: Int?
+    let isBookmarked: Bool?
+
+    func toPost() -> Post {
+        Post(
+            id: postId,
+            userId: userId,
+            type: Post.PostType(rawValue: type) ?? .goodThing,
+            content: content,
+            category: PostCategory(rawValue: category ?? "") ?? .other,
+            imageUrls: imageUrls ?? [],
+            isVisible: isVisible,
+            createdAt: ISO8601DateFormatter().date(from: createdAt) ?? Date(),
+            user: user?.toUser(),
+            commentCount: commentCount ?? 0,
+            isBookmarked: isBookmarked ?? false
+        )
+    }
+}
+
+private struct UserResponse: Decodable {
+    let userId: String
+    let email: String?
+    let nickname: String?
+    let avatarURL: String?
+    let bio: String?
+
+    func toUser() -> User {
+        User(
+            id: userId,
+            email: email ?? "",
+            nickname: nickname ?? "匿名",
+            avatarURL: avatarURL,
+            bio: bio,
+            createdAt: Date()
+        )
+    }
+}
+
+// MARK: - Legacy Response Model (for compatibility)
 
 struct PostsResponse: Codable {
     let posts: [Post]
