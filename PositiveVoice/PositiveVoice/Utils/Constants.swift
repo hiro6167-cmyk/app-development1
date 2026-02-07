@@ -40,3 +40,12 @@ enum AppStrings {
     static let profile = "プロフィール"
     static let settings = "設定"
 }
+
+enum AWSConfig {
+    static let region = "ap-northeast-1"
+    static let userPoolId = "ap-northeast-1_qVOFlpxJ1"
+    static let userPoolClientId = "34eep7rqmndqrvmln95m3sa76f"
+    static let identityPoolId = "ap-northeast-1:368eb286-5c76-4fa1-87db-e8a97c38321b"
+    static let apiEndpoint = "https://2qti95chy9.execute-api.ap-northeast-1.amazonaws.com/dev"
+    static let mediaBucket = "positivevoice-media-dev-523234425923"
+}

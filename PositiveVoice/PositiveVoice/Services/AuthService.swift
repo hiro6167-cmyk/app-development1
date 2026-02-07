@@ -1,6 +1,7 @@
 import Foundation
-import Amplify
-import AWSCognitoAuthPlugin
+
+// AWS Amplifyは後から追加します
+// 現在はモックモードで動作します
 
 protocol AuthServiceProtocol {
     func signUp(email: String, password: String) async throws -> String
@@ -9,8 +10,8 @@ protocol AuthServiceProtocol {
     func signInWithApple() async throws -> Bool
     func signInWithGoogle() async throws -> Bool
     func signOut() async throws
-    func getCurrentUser() async throws -> AuthUser?
-    func fetchUserAttributes() async throws -> [AuthUserAttribute]
+    func getCurrentUser() async throws -> User?
+    func isSignedIn() async -> Bool
 }
 
 class AuthService: AuthServiceProtocol {
@@ -18,125 +19,60 @@ class AuthService: AuthServiceProtocol {
 
     private init() {}
 
-    // MARK: - Sign Up
+    // MARK: - Sign Up (Mock)
 
     func signUp(email: String, password: String) async throws -> String {
-        let userAttributes = [AuthUserAttribute(.email, value: email)]
-        let options = AuthSignUpRequest.Options(userAttributes: userAttributes)
-
-        let result = try await Amplify.Auth.signUp(
-            username: email,
-            password: password,
-            options: options
-        )
-
-        switch result.nextStep {
-        case .confirmUser(let deliveryDetails, _, _):
-            print("Confirmation code sent to: \(deliveryDetails?.destination ?? "unknown")")
-            return email
-        case .done:
-            print("Sign up complete")
-            return email
-        }
+        // モック: 常に成功
+        try await Task.sleep(nanoseconds: 500_000_000) // 0.5秒待機
+        print("AuthService: Mock sign up for \(email)")
+        return email
     }
 
-    // MARK: - Confirm Sign Up
+    // MARK: - Confirm Sign Up (Mock)
 
     func confirmSignUp(email: String, code: String) async throws -> Bool {
-        let result = try await Amplify.Auth.confirmSignUp(
-            for: email,
-            confirmationCode: code
-        )
-
-        return result.isSignUpComplete
+        try await Task.sleep(nanoseconds: 500_000_000)
+        print("AuthService: Mock confirm sign up")
+        return true
     }
 
-    // MARK: - Sign In
+    // MARK: - Sign In (Mock)
 
     func signIn(email: String, password: String) async throws -> Bool {
-        let result = try await Amplify.Auth.signIn(
-            username: email,
-            password: password
-        )
-
-        switch result.nextStep {
-        case .done:
-            print("Sign in succeeded")
-            return true
-        case .confirmSignUp:
-            print("User needs to confirm sign up")
-            return false
-        default:
-            print("Sign in requires additional steps: \(result.nextStep)")
-            return false
-        }
+        try await Task.sleep(nanoseconds: 500_000_000)
+        print("AuthService: Mock sign in for \(email)")
+        return true
     }
 
-    // MARK: - Social Sign In
+    // MARK: - Social Sign In (Mock)
 
     func signInWithApple() async throws -> Bool {
-        let result = try await Amplify.Auth.signInWithWebUI(
-            for: .apple,
-            presentationAnchor: nil
-        )
-
-        return result.isSignedIn
+        try await Task.sleep(nanoseconds: 500_000_000)
+        print("AuthService: Mock Apple sign in")
+        return true
     }
 
     func signInWithGoogle() async throws -> Bool {
-        let result = try await Amplify.Auth.signInWithWebUI(
-            for: .google,
-            presentationAnchor: nil
-        )
-
-        return result.isSignedIn
+        try await Task.sleep(nanoseconds: 500_000_000)
+        print("AuthService: Mock Google sign in")
+        return true
     }
 
-    // MARK: - Sign Out
+    // MARK: - Sign Out (Mock)
 
     func signOut() async throws {
-        let result = await Amplify.Auth.signOut()
-
-        guard let signOutResult = result as? AWSCognitoSignOutResult else {
-            print("Sign out failed")
-            return
-        }
-
-        switch signOutResult {
-        case .complete:
-            print("Sign out succeeded")
-        case .partial(let revokeTokenError, let globalSignOutError, let hostedUIError):
-            print("Sign out partial: \(String(describing: revokeTokenError)), \(String(describing: globalSignOutError)), \(String(describing: hostedUIError))")
-        case .failed(let error):
-            throw error
-        }
+        print("AuthService: Mock sign out")
     }
 
-    // MARK: - Current User
+    // MARK: - Current User (Mock)
 
-    func getCurrentUser() async throws -> AuthUser? {
-        do {
-            let user = try await Amplify.Auth.getCurrentUser()
-            return user
-        } catch {
-            return nil
-        }
+    func getCurrentUser() async throws -> User? {
+        return User.mock
     }
 
-    // MARK: - User Attributes
-
-    func fetchUserAttributes() async throws -> [AuthUserAttribute] {
-        return try await Amplify.Auth.fetchUserAttributes()
-    }
-
-    // MARK: - Session Check
+    // MARK: - Session Check (Mock)
 
     func isSignedIn() async -> Bool {
-        do {
-            let session = try await Amplify.Auth.fetchAuthSession()
-            return session.isSignedIn
-        } catch {
-            return false
-        }
+        return false
     }
 }
