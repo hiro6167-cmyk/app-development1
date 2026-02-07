@@ -42,20 +42,41 @@
 ### カラースキーム
 - Primary: #FF8C42（温かいオレンジ）
 - Secondary: #FFD166（明るいイエロー）
+- Accent: #F4845F（コーラル）
 - Background: #FFF8F0（クリーム）
-- テキスト: #5D4037（ブラウン系）
-- グリーン系は使用しない
+- TextPrimary: #5D4037（ブラウン系）
+- Success: #FFB347（オレンジ系 - 緑は使用禁止）
+- Error: #E57373（ソフトレッド）
+- **カラールール**: 緑系の色（#XXXXXXでG値が突出するもの）は一切使用禁止。成功状態もオレンジ/イエロー系で表現する
 
 ### 投稿タイプ
-- `light`: 今日あったいいこと
-- `seed`: 世界にこうなってほしい
+- `light`: 今日あったいいこと（アイコン: sun.max.fill）
+- `seed`: 世界にこうなってほしい（アイコン: sparkles）
+- ※leafアイコンは緑を想起させるため使用禁止
 
 ### AWS連携
-- API Endpoint: https://2qti95chy9.execute-api.ap-northeast-1.amazonaws.com/dev
-- リージョン: ap-northeast-1（東京）
-- 認証: Cognito（メール/パスワード）
+- 設定値は全て Constants.swift の AWSConfig に集約
+- ドキュメント記載値は参考情報、実装時は必ずConstants参照
 
-### 発見された注意点
-- NavigationStack は iOS 16+、onChange(of:initial:) は iOS 17+ が必要
+### iOS実装前提（iOS 17.0固定）
 - Minimum Deployments: iOS 17.0
+- @Observable マクロを使用（Observation framework）
+- onChange(of:initial:) 使用可能
+- NavigationStack 使用
 - シミュレーターと実機でメモリ使用量に差があるため注意
+
+### 認証（Cognito）実装ルール
+- User Pool + SRP認証フロー
+- トークン: ID Token（API認証）/ Access Token（Cognito操作）/ Refresh Token（更新用）
+- Keychain保存: ID Token + Refresh Token
+- トークン更新: 排他制御で単一フライト（同時多発リクエストの競合抑止）
+- 401受信時: Refresh Token で更新 → 成功時リトライ（冪等なGETのみ）
+- サインアウト時: Keychain全削除 + メモリキャッシュクリア
+
+### 画像アップロードルール
+- Info.plist: NSPhotoLibraryUsageDescription 必須
+- HEIC → JPEG変換、圧縮率0.8
+- EXIF（位置情報含む）は完全削除してからアップロード
+- 長辺1080pxにリサイズ
+- 並列アップロード: 最大2枚まで
+- 失敗時: 3回までリトライ、それでも失敗なら該当画像のみスキップしてユーザーに通知

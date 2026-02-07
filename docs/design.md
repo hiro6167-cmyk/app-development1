@@ -129,7 +129,7 @@ enum PostType: String, Codable, CaseIterable {
     var icon: String {
         switch self {
         case .light: return "sun.max.fill"
-        case .seed: return "leaf.fill"
+        case .seed: return "sparkles"  // leaf.fillは緑を想起させるため禁止
         }
     }
 }
@@ -195,7 +195,7 @@ enum PostCategory: String, Codable, CaseIterable {
         case .health: return "heart.fill"
         case .hobby: return "star.fill"
         case .food: return "fork.knife"
-        case .nature: return "leaf.fill"
+        case .nature: return "cloud.sun.fill"  // leaf.fillは緑を想起させるため禁止
         case .gratitude: return "hands.clap.fill"
         case .achievement: return "trophy.fill"
         case .other: return "ellipsis.circle.fill"
@@ -281,24 +281,111 @@ https://2qti95chy9.execute-api.ap-northeast-1.amazonaws.com/dev
 | POST | /ai/classify | カテゴリ分類 | 必要 |
 | POST | /ai/moderate | 不適切コンテンツ検出 | 必要 |
 
-### 4.3 エラーハンドリング
+### 4.3 ページネーション・ソート・フィルタ仕様
+
+#### 一覧取得API共通仕様
+
+**リクエストパラメータ:**
+| パラメータ | 型 | 必須 | デフォルト | 説明 |
+|-----------|------|------|-----------|------|
+| limit | Int | No | 20 | 取得件数（最大50） |
+| cursor | String | No | null | ページングカーソル（DynamoDB LastEvaluatedKey） |
+| sort | String | No | "newest" | ソート順（newest / recommended） |
+
+**GET /posts 追加パラメータ:**
+| パラメータ | 型 | 必須 | 説明 |
+|-----------|------|------|------|
+| type | String | No | "light" or "seed"（指定なしで両方） |
+| category | String | No | カテゴリフィルタ |
+
+**GET /posts/search 追加パラメータ:**
+| パラメータ | 型 | 必須 | 説明 |
+|-----------|------|------|------|
+| q | String | Yes | 検索キーワード |
+| type | String | No | 投稿タイプフィルタ |
+| category | String | No | カテゴリフィルタ |
+
+**レスポンス形式（一覧系共通）:**
+```json
+{
+  "items": [...],
+  "nextCursor": "eyJpZCI6Inh4eCIsImNyZWF0ZWRBdCI6Ii4uLiJ9",
+  "hasMore": true
+}
+```
+
+### 4.4 エラーレスポンス標準仕様
+
+**サーバーエラーレスポンス形式:**
+```json
+{
+  "message": "エラーメッセージ（ユーザー表示用）",
+  "code": "ERROR_CODE",
+  "details": {}  // オプション：デバッグ情報
+}
+```
+
+**エラーコード一覧:**
+| HTTPステータス | code | 説明 |
+|---------------|------|------|
+| 400 | INVALID_REQUEST | リクエスト不正 |
+| 401 | TOKEN_EXPIRED | Cognitoトークン期限切れ |
+| 401 | UNAUTHORIZED | 認証なし |
+| 403 | FORBIDDEN | 権限なし（他人の投稿削除等） |
+| 404 | NOT_FOUND | リソースが存在しない |
+| 409 | ALREADY_EXISTS | 重複（既にフォロー中等） |
+| 422 | VALIDATION_ERROR | バリデーションエラー |
+| 429 | RATE_LIMITED | レート制限超過 |
+| 500 | INTERNAL_ERROR | サーバー内部エラー |
+
+**APIClient変換ルール:**
+```swift
+func mapError(statusCode: Int, body: ErrorResponse?) -> APIError {
+    switch statusCode {
+    case 401 where body?.code == "TOKEN_EXPIRED":
+        return .tokenExpired  // → refresh試行
+    case 401:
+        return .unauthorized  // → ログイン画面へ
+    case 403:
+        return .forbidden
+    case 404:
+        return .notFound
+    case 400, 422:
+        return .validationError(body?.message ?? "入力内容を確認してください")
+    case 429:
+        return .rateLimited
+    case 500...:
+        return .serverError(statusCode, body?.message ?? "サーバーエラー")
+    default:
+        return .unknown
+    }
+}
+```
+
+### 4.5 エラーハンドリング（クライアント）
 
 ```swift
 enum APIError: Error, LocalizedError {
     case networkUnavailable
-    case unauthorized
+    case tokenExpired          // → 自動refresh試行
+    case unauthorized          // → ログイン画面へ
     case forbidden
     case notFound
+    case validationError(String)
+    case rateLimited
     case serverError(Int, String)
     case decodingFailed
-    case unknown(Error)
+    case unknown
 
     var errorDescription: String? {
         switch self {
         case .networkUnavailable: return "ネットワークに接続できません"
+        case .tokenExpired: return "セッションが切れました"
         case .unauthorized: return "ログインが必要です"
         case .forbidden: return "アクセス権限がありません"
         case .notFound: return "データが見つかりません"
+        case .validationError(let msg): return msg
+        case .rateLimited: return "しばらく待ってから再試行してください"
         case .serverError(_, let msg): return msg
         case .decodingFailed: return "データの読み込みに失敗しました"
         case .unknown: return "予期しないエラーが発生しました"
@@ -353,6 +440,8 @@ TabView
 
 ### 5.3 カラーパレット（v2更新）
 
+**重要**: 緑系の色は一切使用禁止。全色はConstants.swiftに集約、ドキュメントは参考情報。
+
 ```swift
 enum AppColors {
     // メインカラー（温かいオレンジ系）
@@ -368,8 +457,8 @@ enum AppColors {
     static let textPrimary = Color(hex: "5D4037")  // ブラウン
     static let textSecondary = Color(hex: "8D6E63") // ライトブラウン
 
-    // 状態
-    static let success = Color(hex: "7CB342")      // ライトグリーン
+    // 状態（緑禁止：オレンジ系で統一）
+    static let success = Color(hex: "FFB347")      // オレンジ系（緑は使用禁止）
     static let error = Color(hex: "E57373")        // ソフトレッド
 
     // グラデーション
@@ -383,6 +472,7 @@ enum AppColors {
     static let darkBackground = Color(hex: "1A1A1A")
     static let darkSurface = Color(hex: "2D2D2D")
     static let darkPrimary = Color(hex: "FFB266")
+    static let darkSuccess = Color(hex: "FFCC80")  // ダーク用オレンジ系
 }
 ```
 
@@ -450,12 +540,66 @@ PositiveVoice/
 
 | 対策項目 | 実装方針 |
 |----------|----------|
-| 認証 | AWS Cognito（メール/パスワード） |
-| トークン管理 | Keychain保存、自動リフレッシュ |
+| 認証 | AWS Cognito（User Pool + SRP認証フロー） |
+| トークン管理 | Keychain保存、自動リフレッシュ（下記詳細） |
 | API通信 | HTTPS必須 |
-| 画像アップロード | S3署名付きURL（有効期限15分） |
+| 画像アップロード | S3署名付きURL（有効期限15分）（下記詳細） |
 | 入力バリデーション | クライアント + サーバーサイド両方 |
 | 不適切コンテンツ | AI自動検出 + 報告機能 |
+
+### 7.1 Cognito トークン管理詳細
+
+**トークン種別と用途:**
+| トークン | 保存先 | 用途 | 有効期限 |
+|---------|--------|------|---------|
+| ID Token | Keychain | API認証ヘッダー | 1時間 |
+| Access Token | メモリのみ | Cognito API操作 | 1時間 |
+| Refresh Token | Keychain | トークン更新 | 30日 |
+
+**トークン更新フロー:**
+```
+1. APIリクエスト送信
+2. 401 (TOKEN_EXPIRED) 受信
+3. AuthService.refreshToken() 呼び出し
+   - 排他制御: 同時多発リクエストは単一フライトに集約
+   - Refresh Token → Cognito → 新ID Token取得
+4. 成功時: Keychain更新 → 元リクエストをリトライ（冪等なGETのみ）
+5. 失敗時: ログイン画面へ遷移
+```
+
+**サインアウト時の処理:**
+- Keychain: ID Token, Refresh Token 削除
+- メモリ: Access Token, ユーザー情報 クリア
+- ローカルキャッシュ: 全削除
+- Cognito: globalSignOut 呼び出し（他デバイスも無効化）
+
+### 7.2 画像アップロード詳細
+
+**Info.plist 必須キー:**
+```xml
+<key>NSPhotoLibraryUsageDescription</key>
+<string>投稿に画像を添付するために写真へのアクセスが必要です</string>
+```
+
+**アップロードフロー:**
+```
+1. PhotosPicker で画像選択（最大4枚）
+2. 前処理:
+   - HEIC → JPEG変換
+   - 長辺1080pxにリサイズ
+   - EXIF（位置情報含む）完全削除
+   - 圧縮率0.8でJPEGエンコード
+3. POST /media/upload-url で署名付きURL取得
+4. 並列アップロード（最大2並列）
+5. 失敗時: 3回までリトライ
+6. 全リトライ失敗: 該当画像スキップ、ユーザーに通知
+7. 成功した画像URLを投稿データに含めて送信
+```
+
+**制限:**
+- 1枚あたり最大5MB（リサイズ後）
+- 対応形式: JPEG, PNG, HEIC（サーバー保存はJPEG統一）
+- 署名付きURLの有効期限: 15分
 
 ---
 
